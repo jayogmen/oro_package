@@ -53,7 +53,7 @@ jobs:
           done
 
   version:
-    needs: validate
+    needs: validate 
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     outputs:
@@ -104,7 +104,7 @@ jobs:
             echo "current_version=${LATEST_TAG#v}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Bump version
+      - name: Bump versions
         id: bump_version
         run: |
           CURRENT_VERSION=${{ steps.get_latest_version.outputs.current_version }}
