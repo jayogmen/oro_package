@@ -26,8 +26,9 @@ jobs:
         with:
           submodules: 'recursive'
           token: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Validate repository structure
+   
+   - name: Validate repository structure
+
         run: |
           # Get list of all submodules
           SUBMODULES=$(git config --file .gitmodules --get-regexp path | awk '{ print $2 }')
@@ -184,36 +185,36 @@ jobs:
 
       - name: Deploy to OTA server
         run: |
-          PAYLOAD='{
-            "projectName": "ota_update",
-            "artifactId": "${{ env.COMPONENT_NAME }}",
-            "version": "${{ needs.version.outputs.new_version }}",
-            "url": "${{ env.GITHUB_REPO }}",
-            "updateType": "${{ env.UPDATE_TYPE }}",
-            "metadata": '"$(cat metadata.json)"'
-          }'
-          
-          echo "Deploying update to OTA server..."
-          
-          RESPONSE=$(curl -s -X POST \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD" \
-            -w "\n%{http_code}" \
-            ${{ env.DEPLOY_API_URL }}/saveArtifact)
-          
-          HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
-          RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
-          
-          echo "Response: $RESPONSE_BODY"
-          echo "Status code: $HTTP_STATUS"
-          
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "Deployment failed"
-            exit 1
-          fi
-          
-          echo "Component update deployment successful"
-
+            PAYLOAD='{
+                "projectName": "ota_update",
+                "artifactId": "${{ env.COMPONENT_NAME }}",
+                "version": "${{ needs.version.outputs.new_version }}",
+                "url": "${{ env.GITHUB_REPO }}",
+                "updateType": "${{ env.UPDATE_TYPE }}",
+                "metadata": '"$(cat metadata.json)"'
+            }'
+            
+            echo "Deploying update to OTA server..."
+            
+            RESPONSE=$(curl -s -X POST \
+                -H "Content-Type: application/json" \
+                -d "$PAYLOAD" \
+                -w "\n%{http_code}" \
+                ${{ env.DEPLOY_API_URL }}/saveArtifact)
+            
+            HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
+            RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
+            
+            echo "Response: $RESPONSE_BODY"
+            echo "Status code: $HTTP_STATUS"
+            
+            if [ "$HTTP_STATUS" != "200" ]; then
+                echo "Deployment failed"
+                exit 1
+            fi
+            
+            echo "Component update deployment successful"
+  
       - name: Upload metadata
         uses: actions/upload-artifact@v3
         with:
