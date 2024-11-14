@@ -177,8 +177,7 @@ jobs:
             "workflow": "component-update",
             "version": "${{ needs.version.outputs.new_version }}",
             "modifiedFiles": ${{ needs.analyze.outputs.modified_files }},
-            "submodules": ${{ needs.version.outputs.submodule_info }},
-            "submoduleChanges": ${{ needs.analyze.outputs.submodule_changes }}
+           
           }
           EOL
 
