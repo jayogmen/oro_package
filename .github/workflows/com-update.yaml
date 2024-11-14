@@ -18,7 +18,8 @@ permissions:
 
 jobs:
   validate:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name == 'push' 
+    #|| (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -27,7 +28,7 @@ jobs:
           submodules: 'recursive'
           token: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Validate repository structure changes
+      - name: Validate repository structure
         run: |
           # Get list of all submodules
           SUBMODULES=$(git config --file .gitmodules --get-regexp path | awk '{ print $2 }')
@@ -54,7 +55,8 @@ jobs:
 
   version:
     needs: validate 
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name == 'push' 
+    #|| (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.bump_version.outputs.new_version }}
@@ -122,7 +124,8 @@ jobs:
 
   analyze:
     needs: version
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name == 'push' 
+    #|| (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     outputs:
       modified_files: ${{ steps.check-changes.outputs.modified_files }}
@@ -163,7 +166,8 @@ jobs:
 
   deploy:
     needs: [version, analyze]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') 
+    #|| (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: Create deployment package
