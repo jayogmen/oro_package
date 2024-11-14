@@ -188,30 +188,35 @@ jobs:
 
       - name: Deploy to OTA server
         run: |
+            # Load metadata as a JSON-encoded string
+            METADATA=$(cat metadata.json | jq -c .)
+            
+            # Create payload JSON using jq
             PAYLOAD=$(jq -n \
-            --arg projectName "ota_update" \
-            --arg artifactId "${{ env.COMPONENT_NAME }}" \
-            --arg version "${{ needs.version.outputs.new_version }}" \
-            --arg url "${{ env.GITHUB_REPO }}" \
-            --arg updateType "${{ env.UPDATE_TYPE }}" \
-            --argjson metadata "$(cat metadata.json)" \
-            '{
+                --arg projectName "ota_update" \
+                --arg artifactId "${{ env.COMPONENT_NAME }}" \
+                --arg version "${{ needs.version.outputs.new_version }}" \
+                --arg url "${{ env.GITHUB_REPO }}" \
+                --arg updateType "${{ env.UPDATE_TYPE }}" \
+                --argjson metadata "$METADATA" \
+                '{
                 projectName: $projectName,
                 artifactId: $artifactId,
                 version: $version,
                 url: $url,
                 updateType: $updateType,
                 metadata: $metadata
-            }')
-    
+                }')
+        
+            echo "Payload being sent: $PAYLOAD"
             echo "Deploying update to OTA server..."
-              
+            
             RESPONSE=$(curl -s -X POST \
                 -H "Content-Type: application/json" \
                 -d "$PAYLOAD" \
                 -w "\n%{http_code}" \
                 ${{ env.DEPLOY_API_URL }}/saveArtifact)
-        
+            
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
             RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
             
@@ -224,6 +229,7 @@ jobs:
             fi
             
             echo "Component update deployment successful"
+    
     
   
       - name: Upload metadata
