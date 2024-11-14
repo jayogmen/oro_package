@@ -190,7 +190,7 @@ jobs:
             "version": "${{ needs.version.outputs.new_version }}",
             "url": "${{ env.GITHUB_REPO }}",
             "updateType": "${{ env.UPDATE_TYPE }}",
-            "metadata": '"$(jq -c '.' metadata.json)"'
+            "metadata": '"$(cat metadata.json)"'
           }'
           
           echo "Deploying update to OTA server..."
