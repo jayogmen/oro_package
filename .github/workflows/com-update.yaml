@@ -10,7 +10,7 @@ on:
 env:
   DEPLOY_API_URL: "http://13.232.234.162:5000/api"
   UPDATE_TYPE: "component-update"
-  COMPONENT_NAME: "oro_ws"
+  COMPONENT_NAME: "oro_suite"
   GITHUB_REPO: "https://github.com/jayogmen/oro_package.git"
 
 permissions:
@@ -23,15 +23,33 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        
+        with:
+          submodules: 'recursive'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
       - name: Validate repository structure
         run: |
-          # Check for required directories and files and make sure they have to perfect
-          for dir in "src" ; do
-            if [ ! -d "$dir" ]; then
-              echo "Required directory '$dir' is missing"
-              exit 1
-            fi
+          # Get list of all submodules
+          SUBMODULES=$(git config --file .gitmodules --get-regexp path | awk '{ print $2 }')
+          
+          # Validate each submodule
+          for submodule in $SUBMODULES; do
+            echo "Validating submodule: $submodule"
+            
+            # Check for ROS2 package structure
+            for dir in "include" "launch" "src"; do
+              if [ ! -d "$submodule/$dir" ]; then
+                echo "Warning: Directory '$submodule/$dir' is missing"
+              fi
+            done
+            
+            # Check for essential ROS2 package files
+            for file in "CMakeLists.txt" "package.xml"; do
+              if [ ! -f "$submodule/$file" ]; then
+                echo "Error: Required file '$submodule/$file' is missing"
+                exit 1
+              fi
+            done
           done
 
   version:
@@ -41,17 +59,40 @@ jobs:
     outputs:
       new_version: ${{ steps.bump_version.outputs.new_version }}
       commit_hash: ${{ steps.get_commit.outputs.commit_hash }}
+      submodule_info: ${{ steps.get_submodule_info.outputs.submodule_info }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          submodules: 'recursive'
+          token: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Get commit hash
         id: get_commit
         run: |
           COMMIT_HASH=$(git rev-parse HEAD)
           echo "commit_hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
+
+      - name: Get submodule information
+        id: get_submodule_info
+        run: |
+          # Initialize empty JSON object
+          echo "submodule_info={}" > temp.json
+          
+          # Get info for each submodule
+          git submodule foreach --quiet '
+            SUBNAME=$(basename $(pwd))
+            COMMIT=$(git rev-parse HEAD)
+            echo "{\"$SUBNAME\": {\"commit\": \"$COMMIT\"}}" > temp_sub.json
+            jq -s ".[0] * .[1]" temp.json temp_sub.json > temp_new.json
+            mv temp_new.json temp.json
+          '
+          
+          # Set output
+          SUBMODULE_INFO=$(cat temp.json)
+          echo "submodule_info=$SUBMODULE_INFO" >> $GITHUB_OUTPUT
+          rm temp.json temp_sub.json 2>/dev/null || true
 
       - name: Get latest version
         id: get_latest_version
@@ -85,17 +126,40 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       modified_files: ${{ steps.check-changes.outputs.modified_files }}
+      submodule_changes: ${{ steps.check-submodule-changes.outputs.submodule_changes }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           fetch-depth: 2
+          submodules: 'recursive'
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Analyze changes
         id: check-changes
         run: |
           MODIFIED_FILES=$(git diff --name-only HEAD^ HEAD | jq -R -s -c 'split("\n")[:-1]')
           echo "modified_files=$MODIFIED_FILES" >> $GITHUB_OUTPUT
+
+      - name: Check submodule changes
+        id: check-submodule-changes
+        run: |
+          # Initialize empty JSON object
+          echo "{}" > changes.json
+          
+          # Get changes for each submodule
+          git submodule foreach --quiet '
+            SUBNAME=$(basename $(pwd))
+            CHANGES=$(git diff --name-only HEAD^ HEAD 2>/dev/null || echo "new-commit")
+            echo "{\"$SUBNAME\": $(echo "$CHANGES" | jq -R -s "split(\"\n\")")}" > sub_changes.json
+            jq -s ".[0] * .[1]" changes.json sub_changes.json > new_changes.json
+            mv new_changes.json changes.json
+          '
+          
+          # Set output
+          SUBMODULE_CHANGES=$(cat changes.json)
+          echo "submodule_changes=$SUBMODULE_CHANGES" >> $GITHUB_OUTPUT
+          rm changes.json sub_changes.json 2>/dev/null || true
 
   deploy:
     needs: [version, analyze]
@@ -112,7 +176,9 @@ jobs:
             "branch": "main",
             "workflow": "component-update",
             "version": "${{ needs.version.outputs.new_version }}",
-            "modifiedFiles": ${{ needs.analyze.outputs.modified_files }}
+            "modifiedFiles": ${{ needs.analyze.outputs.modified_files }},
+            "submodules": ${{ needs.version.outputs.submodule_info }},
+            "submoduleChanges": ${{ needs.analyze.outputs.submodule_changes }}
           }
           EOL
 
