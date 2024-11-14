@@ -27,7 +27,7 @@ jobs:
           submodules: 'recursive'
           token: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Validate repository structure
+      - name: Validate repository structure changes
         run: |
           # Get list of all submodules
           SUBMODULES=$(git config --file .gitmodules --get-regexp path | awk '{ print $2 }')
