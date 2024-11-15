@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   validate:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' 
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,7 +26,7 @@ jobs:
         with:
           submodules: 'recursive'
           token: ${{ secrets.GITHUB_TOKEN }}
-
+          
       - name: Validate repository structure
         run: |
           for submodule in $(git submodule status --cached --porcelain | cut -d' ' -f3-); do
@@ -45,8 +45,8 @@ jobs:
           done
 
   version:
-    needs: validate
-    if: github.event_name == 'push'
+    needs: validate 
+    if: github.event_name == 'push' 
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.bump_version.outputs.new_version }}
@@ -59,7 +59,7 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
           token: ${{ secrets.GITHUB_TOKEN }}
-
+          
       - name: Get commit hash
         id: get_commit
         run: |
@@ -107,7 +107,7 @@ jobs:
 
   analyze:
     needs: version
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' 
     runs-on: ubuntu-latest
     outputs:
       modified_files: ${{ steps.check-changes.outputs.modified_files }}
@@ -119,6 +119,7 @@ jobs:
           fetch-depth: 2
           submodules: 'recursive'
           token: ${{ secrets.GITHUB_TOKEN }}
+
 
       - name: Analyze changes
         id: check-changes
@@ -143,7 +144,7 @@ jobs:
 
   deploy:
     needs: [version, analyze]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') 
     runs-on: ubuntu-latest
     steps:
       - name: Install jq
@@ -158,16 +159,16 @@ jobs:
             "branch": "main",
             "workflow": "component-update",
             "version": "${{ needs.version.outputs.new_version }}",
-            "modifiedFiles": ${{ needs.analyze.outputs.modified_files }},
+            "modifiedFiles": $(jq -R -s 'split("\n")' <<< "${{ needs.analyze.outputs.modified_files }}"),
             "submodules": ${{ needs.version.outputs.submodule_info }},
-            "submoduleChanges": ${{ needs.analyze.outputs.submodule_changes }}
+            "submoduleChanges": $(jq -R -s 'split("\n")' <<< "${{ needs.analyze.outputs.submodule_changes }}")
           }
           EOL
 
       - name: Deploy to OTA server
         shell: bash
         run: |
-          METADATA=$(jq '.' metadata.json)
+          METADATA=$(jq '.modifiedFiles |= split("\n") | .submoduleChanges |= split("\n")' metadata.json)
           PAYLOAD=$(jq -n \
             --arg projectName "ota_update" \
             --arg artifactId "${COMPONENT_NAME}" \
@@ -197,7 +198,6 @@ jobs:
           UPDATE_TYPE: ${{ env.UPDATE_TYPE }}
           COMPONENT_NAME: ${{ env.COMPONENT_NAME }}
           GITHUB_REPO: ${{ env.GITHUB_REPO }}
-      
 
       - name: Upload metadata
         uses: actions/upload-artifact@v3
