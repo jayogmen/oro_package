@@ -167,7 +167,7 @@ jobs:
       - name: Deploy to OTA server
         shell: bash
         run: |
-          METADATA=$(cat metadata.json)
+          METADATA=$(jq '.' metadata.json)
           PAYLOAD=$(jq -n \
             --arg projectName "ota_update" \
             --arg artifactId "${COMPONENT_NAME}" \
@@ -197,6 +197,7 @@ jobs:
           UPDATE_TYPE: ${{ env.UPDATE_TYPE }}
           COMPONENT_NAME: ${{ env.COMPONENT_NAME }}
           GITHUB_REPO: ${{ env.GITHUB_REPO }}
+      
 
       - name: Upload metadata
         uses: actions/upload-artifact@v3
