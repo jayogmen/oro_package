@@ -17,10 +17,8 @@ permissions:
   contents: write
 
 jobs:
-
   validate:
     if: github.event_name == 'push' 
-    #|| (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -31,21 +29,14 @@ jobs:
           
       - name: Validate repository structure
         run: |
-          # Get list of all submodules
           SUBMODULES=$(git config --file .gitmodules --get-regexp path | awk '{ print $2 }')
-          
-          # Validate each submodule
           for submodule in $SUBMODULES; do
             echo "Validating submodule: $submodule"
-            
-            # Check for ROS2 package structure
             for dir in "include" "launch" "src"; do
               if [ ! -d "$submodule/$dir" ]; then
                 echo "Warning: Directory '$submodule/$dir' is missing"
               fi
             done
-            
-            # Check for essential ROS2 package files
             for file in "CMakeLists.txt" "package.xml"; do
               if [ ! -f "$submodule/$file" ]; then
                 echo "Error: Required file '$submodule/$file' is missing"
@@ -57,7 +48,6 @@ jobs:
   version:
     needs: validate 
     if: github.event_name == 'push' 
-    #|| (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.bump_version.outputs.new_version }}
@@ -80,10 +70,7 @@ jobs:
       - name: Get submodule information
         id: get_submodule_info
         run: |
-          # Initialize empty JSON object
-          echo "submodule_info={}" > temp.json
-          
-          # Get info for each submodule
+          echo "{}" > temp.json
           git submodule foreach --quiet '
             SUBNAME=$(basename $(pwd))
             COMMIT=$(git rev-parse HEAD)
@@ -91,8 +78,6 @@ jobs:
             jq -s ".[0] * .[1]" temp.json temp_sub.json > temp_new.json
             mv temp_new.json temp.json
           '
-          
-          # Set output
           SUBMODULE_INFO=$(cat temp.json)
           echo "submodule_info=$SUBMODULE_INFO" >> $GITHUB_OUTPUT
           rm temp.json temp_sub.json 2>/dev/null || true
@@ -126,7 +111,6 @@ jobs:
   analyze:
     needs: version
     if: github.event_name == 'push' 
-    #|| (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     outputs:
       modified_files: ${{ steps.check-changes.outputs.modified_files }}
@@ -148,10 +132,7 @@ jobs:
       - name: Check submodule changes
         id: check-submodule-changes
         run: |
-          # Initialize empty JSON object
           echo "{}" > changes.json
-          
-          # Get changes for each submodule
           git submodule foreach --quiet '
             SUBNAME=$(basename $(pwd))
             CHANGES=$(git diff --name-only HEAD^ HEAD 2>/dev/null || echo "new-commit")
@@ -159,8 +140,6 @@ jobs:
             jq -s ".[0] * .[1]" changes.json sub_changes.json > new_changes.json
             mv new_changes.json changes.json
           '
-          
-          # Set output
           SUBMODULE_CHANGES=$(cat changes.json)
           echo "submodule_changes=$SUBMODULE_CHANGES" >> $GITHUB_OUTPUT
           rm changes.json sub_changes.json 2>/dev/null || true
@@ -168,12 +147,13 @@ jobs:
   deploy:
     needs: [version, analyze]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') 
-    #|| (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
+      - name: Install jq
+        run: sudo apt-get install jq -y
+
       - name: Create deployment package
         run: |
-          # Create metadata for the update
           cat > metadata.json << EOL
           {
             "buildTime": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
@@ -188,48 +168,46 @@ jobs:
           EOL
 
       - name: Deploy to OTA server
+        shell: bash
         run: |
-          # Load metadata as a JSON-encoded string
-          METADATA=$(cat metadata.json | jq -c .)
-
-          # Create payload JSON using jq
-          PAYLOAD=$(jq -n \
-              --arg projectName "ota_update" \
-              --arg artifactId "${{ env.COMPONENT_NAME }}" \
-              --arg version "${{ needs.version.outputs.new_version }}" \
-              --arg url "${{ env.GITHUB_REPO }}" \
-              --arg updateType "${{ env.UPDATE_TYPE }}" \
-              --argjson metadata "$METADATA" \
-              '{
-              projectName: $projectName,
-              artifactId: $artifactId,
-              version: $version,
-              url: $url,
-              updateType: $updateType,
-              metadata: $metadata
-              }')
-
+          METADATA=$(cat metadata.json)
+          
+          # Create JSON payload directly without using jq
+          PAYLOAD='{
+            "projectName": "ota_update",
+            "artifactId": "'"${COMPONENT_NAME}"'",
+            "version": "'"${{ needs.version.outputs.new_version }}"'",
+            "url": "'"${GITHUB_REPO}"'",
+            "updateType": "'"${UPDATE_TYPE}"'",
+            "metadata": '"${METADATA}"'
+          }'
+          
           echo "Payload being sent: $PAYLOAD"
           echo "Deploying update to OTA server..."
-
+          
           RESPONSE=$(curl -s -X POST \
-              -H "Content-Type: application/json" \
-              -d "$PAYLOAD" \
-              -w "\n%{http_code}" \
-              ${{ env.DEPLOY_API_URL }}/saveArtifact)
-
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            -w "\n%{http_code}" \
+            ${DEPLOY_API_URL}/saveArtifact)
+          
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
           RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
-
+          
           echo "Response: $RESPONSE_BODY"
           echo "Status code: $HTTP_STATUS"
-
+          
           if [ "$HTTP_STATUS" != "200" ]; then
-              echo "Deployment failed"
-              exit 1
+            echo "Deployment failed"
+            exit 1
           fi
-
+          
           echo "Component update deployment successful"
+        env:
+          DEPLOY_API_URL: ${{ env.DEPLOY_API_URL }}
+          UPDATE_TYPE: ${{ env.UPDATE_TYPE }}
+          COMPONENT_NAME: ${{ env.COMPONENT_NAME }}
+          GITHUB_REPO: ${{ env.GITHUB_REPO }}
 
       - name: Upload metadata
         uses: actions/upload-artifact@v3
