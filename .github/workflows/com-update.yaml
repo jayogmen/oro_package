@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   validate:
-    if: github.event_name == 'push' 
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,11 +26,10 @@ jobs:
         with:
           submodules: 'recursive'
           token: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Validate repository structure
         run: |
-          SUBMODULES=$(git config --file .gitmodules --get-regexp path | awk '{ print $2 }')
-          for submodule in $SUBMODULES; do
+          for submodule in $(git submodule status --cached --porcelain | cut -d' ' -f3-); do
             echo "Validating submodule: $submodule"
             for dir in "include" "launch" "src"; do
               if [ ! -d "$submodule/$dir" ]; then
@@ -46,8 +45,8 @@ jobs:
           done
 
   version:
-    needs: validate 
-    if: github.event_name == 'push' 
+    needs: validate
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.bump_version.outputs.new_version }}
@@ -60,12 +59,11 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
           token: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Get commit hash
         id: get_commit
         run: |
-          COMMIT_HASH=$(git rev-parse HEAD)
-          echo "commit_hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
+          echo "commit_hash=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Get submodule information
         id: get_submodule_info
@@ -78,8 +76,7 @@ jobs:
             jq -s ".[0] * .[1]" temp.json temp_sub.json > temp_new.json
             mv temp_new.json temp.json
           '
-          SUBMODULE_INFO=$(cat temp.json)
-          echo "submodule_info=$SUBMODULE_INFO" >> $GITHUB_OUTPUT
+          echo "submodule_info=$(cat temp.json)" >> $GITHUB_OUTPUT
           rm temp.json temp_sub.json 2>/dev/null || true
 
       - name: Get latest version
@@ -110,7 +107,7 @@ jobs:
 
   analyze:
     needs: version
-    if: github.event_name == 'push' 
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       modified_files: ${{ steps.check-changes.outputs.modified_files }}
@@ -126,7 +123,7 @@ jobs:
       - name: Analyze changes
         id: check-changes
         run: |
-          MODIFIED_FILES=$(git diff --name-only HEAD^ HEAD | jq -R -s -c 'split("\n")[:-1]')
+          MODIFIED_FILES=$(git diff --name-only HEAD^ HEAD)
           echo "modified_files=$MODIFIED_FILES" >> $GITHUB_OUTPUT
 
       - name: Check submodule changes
@@ -146,7 +143,7 @@ jobs:
 
   deploy:
     needs: [version, analyze]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') 
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - name: Install jq
@@ -171,37 +168,29 @@ jobs:
         shell: bash
         run: |
           METADATA=$(cat metadata.json)
-          
-          # Create JSON payload directly without using jq
-          PAYLOAD='{
-            "projectName": "ota_update",
-            "artifactId": "'"${COMPONENT_NAME}"'",
-            "version": "'"${{ needs.version.outputs.new_version }}"'",
-            "url": "'"${GITHUB_REPO}"'",
-            "updateType": "'"${UPDATE_TYPE}"'",
-            "metadata": '"${METADATA}"'
-          }'
-          
+          PAYLOAD=$(jq -n \
+            --arg projectName "ota_update" \
+            --arg artifactId "${COMPONENT_NAME}" \
+            --arg version "${{ needs.version.outputs.new_version }}" \
+            --arg url "${GITHUB_REPO}" \
+            --arg updateType "${UPDATE_TYPE}" \
+            --argjson metadata "$METADATA" \
+            '{projectName: $projectName, artifactId: $artifactId, version: $version, url: $url, updateType: $updateType, metadata: $metadata}')
           echo "Payload being sent: $PAYLOAD"
           echo "Deploying update to OTA server..."
-          
           RESPONSE=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" \
             -w "\n%{http_code}" \
             ${DEPLOY_API_URL}/saveArtifact)
-          
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
           RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
-          
           echo "Response: $RESPONSE_BODY"
           echo "Status code: $HTTP_STATUS"
-          
           if [ "$HTTP_STATUS" != "200" ]; then
             echo "Deployment failed"
             exit 1
           fi
-          
           echo "Component update deployment successful"
         env:
           DEPLOY_API_URL: ${{ env.DEPLOY_API_URL }}
