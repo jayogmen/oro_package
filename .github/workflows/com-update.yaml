@@ -191,7 +191,7 @@ jobs:
             echo "Deployment failed"
             exit 1
           fi
-          echo "Component update deployment successful and check server"
+          echo "Component update deployment successful"
         env:
           DEPLOY_API_URL: ${{ env.DEPLOY_API_URL }}
           UPDATE_TYPE: ${{ env.UPDATE_TYPE }}
