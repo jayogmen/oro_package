@@ -168,7 +168,7 @@ jobs:
       - name: Deploy to OTA server
         shell: bash
         run: |
-          METADATA=$(jq '.modifiedFiles |= split("\n") | .submoduleChanges |= split("\n")' metadata.json)
+          METADATA=$(jq '.modifiedFiles |= (if type=="string" then split("\n") else . end) | .submoduleChanges |= (if type=="string" then split("\n") else . end)' metadata.json)
           PAYLOAD=$(jq -n \
             --arg projectName "ota_update" \
             --arg artifactId "${COMPONENT_NAME}" \
