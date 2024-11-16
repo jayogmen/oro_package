@@ -2,9 +2,7 @@
 [submodule "listener"]
 	path = listener
 	url = https://github.com/jayogmen/listener.git
-[submodule "talker"]
-	path = talker
-	url = https://github.com/jayogmen/talker.git
+
 [submodule "printer"]
 	path = printer
 	url = https://github.com/jayogmen/printer.git
