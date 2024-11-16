@@ -6,3 +6,6 @@
 [submodule "printer"]
 	path = printer
 	url = https://github.com/jayogmen/printer.git
+[submodule "talker"]
+	path = talker
+	url = https://github.com/jayogmen/talker.git
